@@ -1,0 +1,68 @@
+
+Project: Machine Learning
+========================================================
+
+### Introduction
+For this project, we use the weight lifting data set from the site:  http://groupware.les.inf.puc-rio.br/har. The participants in this experiment were asked to preform lifts in 5 differnet ways (A,B,C,D,E), and  using the data on the movements, we are asked to classify which way the lift was done. The final goal being to predict the correct classification for each of 20 rows of data in the final test set to hand in.
+
+```{r echo=FALSE, warning=FALSE, message=FALSE }
+library(caret)
+training <- read.csv("pml-training.csv")
+rows1 <- nrow(training)
+cols1 <- ncol(training)
+
+columns <- 1:7
+for(i in 1:(length(training)-1)) {
+   if(is.factor(training[,i])){
+        columns <- c(columns, i)
+   } else { 
+        if(length(which(is.na(training[,i])))>0){
+           columns <- c(columns, i)
+        }
+   }
+}
+trainingSet <- training[,-columns]
+
+cols2 <- ncol(trainingSet)
+
+```
+### Cleaning the Data
+This is a fairly large data set with `r rows1` rows and `r cols1` columns. The first 7 columns had subjective data and were not needed for the predictions. Further, many of the other columns had a large number of blank spaces "" and NAs in them. These seemed to be aggregate or calculated data, so I removed them also. This left me with a data set of `r cols2` columns
+
+### Classification Trees
+My first attempt to handle this problem was to try Classification Trees using rpart. After running classification trees on the whole data set, I found that my accuracy on the training set was only around 50%. Often the tree allotted very small area to one or two of the classifications, and sometimes totatally left one out. Thus classification trees did not seem like a reasonable way to solve this problem.
+
+### Random Forests
+My first try with Random Forests was to try all the data, unfortunately the memory on my 6 year old notebook was insufficient. Thus I needed to reduce the number of rows or columns. I chose to try reducing the number of rows first, as 19,622 seemed like a large number. I decided to keep the same number of rows for each classification for the training set to give the algorithm a equal opportunity for each class A, B, C, D, E. Then I selected a random testing group for cross-validation.
+```{r }
+set.seed(7771)
+size = 200  # Number of rows for each type
+Asample <- sample(1:5580, size)
+Bsample <- sample(5581:9377, size)
+Csample <- sample(9378:12799, size)
+Dsample <- sample(12800:16015, size)
+Esample <- sample(16016:19622, size)
+sampTrain <- c(Asample[1:size], Bsample[1:size], Csample[1:size], Dsample[1:size], Esample[1:size])
+## training data set
+training <- trainingSet[sampTrain,]
+remainingData <- trainingSet[-sampTrain,]
+sampTest <- sample(1:nrow(remainingData), size * 5)
+## testing data set
+testing <- remainingData[sampTest,]
+
+```
+With size equal to 50, that is, 250 total rows, I got perfect results on the training data set, but this dropped to 72% accuracy on cross-validation with the testing data set. Moving the size up 100, that is, 500 total rows, again, I got perfect results on the training set and 86.8 % accuracy on testing set. Unfortunately, it was taking 15 minutes on my notebook computer to run the random forest with n=100.
+<p>Next I tried using Principle Component Analysis to reduce the number of columns. I found that I could get 95% of the variation with 25 of the 52 columns. When I did this and  row size equal 200 for 1000 rows total, my accuracy on cross validation was only around 75%. So I decided to put this on the back burner.
+<p>So I went back to trying the Random Forest but with size equal to 200, 1000 rows total. On cross-validation with my test set I got 89%. It took about 35 minutes to run this algorithm on my computer. Below is the output for a run with n=200 and set seed as listed above.
+
+```{r message=FALSE, warning=FALSE }
+modFit <- train(classe~., data=training, method="rf", prox=TRUE)
+pr <- predict(modFit, testing)
+```
+```{r }
+confusionMatrix(pr, testing$classe)
+```
+
+### Conclusion
+I tried the final test set with my first Random Forest with size=200, but only got 16 right out of 20, a bit less than 89%. My second run with a different seed changed 3 of the answers.
+<p>In the end, a man is only as good as his tools. If I had been able to do the Random Forest with more rows, I would have been able to get better accuracy. Still, 90% isn't too bad.
